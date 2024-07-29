@@ -26,6 +26,8 @@
 
 #define XLEN 64 // 
 
+extern reg_t my_constant;
+
 class processor_t;
 class mmu_t;
 typedef reg_t (*insn_func_t)(processor_t*, insn_t, reg_t);
