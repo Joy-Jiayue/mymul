@@ -1,24 +1,32 @@
-// See LICENSE for license details.
 #ifndef _RISCV_PROCESSOR_H
 #define _RISCV_PROCESSOR_H
 
-#include "decode.h"
-#include "trap.h"
-#include "abstract_device.h"
-#include <string>
+#include "decode_macros.h"
+#include "insns/c_mymul.h" 
+// 
 #include <vector>
+#include <functional>
 #include <unordered_map>
-#include <map>
+#include <cinttypes>
+#include <cmath>
+#include <cstdlib>
+#include <iostream>
+#include <iomanip>
 #include <cassert>
-#include "debug_rom_defines.h"
-#include "entropy_source.h"
-#include "csrs.h"
-#include "isa_parser.h"
-#include "triggers.h"
-#include "../fesvr/memif.h"
-#include "vector_unit.h"
+#include <limits.h>
+#include <stdexcept>
+#include <string>
+#include <algorithm>
+#include <unordered_map>
+#include "encoding.h" 
+#include "decode.h"
+#include "insn.h"
+#include "insn_template.h"
+#include "mmu.h"
 
-#define N_HPMCOUNTERS 29
+#define XLEN 64 // 
+
+extern reg_t my_constant;
 
 class processor_t;
 class mmu_t;
@@ -30,34 +38,32 @@ class disassembler_t;
 
 reg_t illegal_instruction(processor_t* p, insn_t insn, reg_t pc);
 
-struct insn_desc_t
-{
-  insn_bits_t match;
-  insn_bits_t mask;
-  insn_func_t fast_rv32i;
-  insn_func_t fast_rv64i;
-  insn_func_t fast_rv32e;
-  insn_func_t fast_rv64e;
-  insn_func_t logged_rv32i;
-  insn_func_t logged_rv64i;
-  insn_func_t logged_rv32e;
-  insn_func_t logged_rv64e;
+// Declaration of custom instruction handler
+reg_t custom_mymul(processor_t* p, insn_t insn, reg_t pc);
 
-  insn_func_t func(int xlen, bool rve, bool logged) const
-  {
-    if (logged)
-      if (rve)
-        return xlen == 64 ? logged_rv64e : logged_rv32e;
-      else
-        return xlen == 64 ? logged_rv64i : logged_rv32i;
-    else
-      if (rve)
-        return xlen == 64 ? fast_rv64e : fast_rv32e;
-      else
-        return xlen == 64 ? fast_rv64i : fast_rv32i;
-  }
+struct insn_desc_t {
+    insn_bits_t match;
+    insn_bits_t mask;
+    insn_func_t fast_rv32i;
+    insn_func_t fast_rv64i;
+    insn_func_t fast_rv32e;
+    insn_func_t fast_rv64e;
+    insn_func_t logged_rv32i;
+    insn_func_t logged_rv64i;
+    insn_func_t logged_rv32e;
+    insn_func_t logged_rv64e;
 
-  static const insn_desc_t illegal_instruction;
+    insn_func_t func(int xlen, bool rve, bool logged) const {
+        if (logged) {
+            if (rve) return xlen == 64 ? logged_rv64e : logged_rv32e;
+            else return xlen == 64 ? logged_rv64i : logged_rv32i;
+        } else {
+            if (rve) return xlen == 64 ? fast_rv64e : fast_rv32e;
+            else return xlen == 64 ? fast_rv64i : fast_rv32i;
+        }
+    }
+
+    static const insn_desc_t illegal_instruction;
 };
 
 // regnum, data
@@ -67,365 +73,239 @@ typedef std::unordered_map<reg_t, freg_t> commit_log_reg_t;
 typedef std::vector<std::tuple<reg_t, uint64_t, uint8_t>> commit_log_mem_t;
 
 // architectural state of a RISC-V hart
-struct state_t
-{
-  void reset(processor_t* const proc, reg_t max_isa);
+struct state_t {
+    void reset(processor_t* const proc, reg_t max_isa);
 
-  reg_t pc;
-  regfile_t<reg_t, NXPR, true> XPR;
-  regfile_t<freg_t, NFPR, false> FPR;
+    reg_t pc;
+    regfile_t<reg_t, NXPR, true> XPR;
+    regfile_t<freg_t, NFPR, false> FPR;
 
-  // control and status registers
-  std::unordered_map<reg_t, csr_t_p> csrmap;
-  reg_t prv;    // TODO: Can this be an enum instead?
-  reg_t prev_prv;
-  bool prv_changed;
-  bool v_changed;
-  bool v;
-  bool prev_v;
-  misa_csr_t_p misa;
-  mstatus_csr_t_p mstatus;
-  csr_t_p mstatush;
-  csr_t_p mepc;
-  csr_t_p mtval;
-  csr_t_p mtvec;
-  csr_t_p mcause;
-  wide_counter_csr_t_p minstret;
-  wide_counter_csr_t_p mcycle;
-  mie_csr_t_p mie;
-  mip_csr_t_p mip;
-  csr_t_p medeleg;
-  csr_t_p mideleg;
-  csr_t_p mcounteren;
-  csr_t_p mevent[N_HPMCOUNTERS];
-  csr_t_p mnstatus;
-  csr_t_p mnepc;
-  csr_t_p scounteren;
-  csr_t_p sepc;
-  csr_t_p stval;
-  csr_t_p stvec;
-  virtualized_csr_t_p satp;
-  csr_t_p scause;
+    // control and status registers
+    std::unordered_map<reg_t, csr_t_p> csrmap;
+    reg_t prv;
+    reg_t prev_prv;
+    bool prv_changed;
+    bool v_changed;
+    bool v;
+    bool prev_v;
+    misa_csr_t_p misa;
+    mstatus_csr_t_p mstatus;
+    csr_t_p mstatush;
+    csr_t_p mepc;
+    csr_t_p mtval;
+    csr_t_p mtvec;
+    csr_t_p mcause;
+    wide_counter_csr_t_p minstret;
+    wide_counter_csr_t_p mcycle;
+    mie_csr_t_p mie;
+    mip_csr_t_p mip;
+    csr_t_p medeleg;
+    csr_t_p mideleg;
+    csr_t_p mcounteren;
+    csr_t_p mevent[N_HPMCOUNTERS];
+    csr_t_p mnstatus;
+    csr_t_p mnepc;
+    csr_t_p scounteren;
+    csr_t_p sepc;
+    csr_t_p stval;
+    csr_t_p stvec;
+    virtualized_csr_t_p satp;
+    csr_t_p scause;
 
-  // When taking a trap into HS-mode, we must access the nonvirtualized HS-mode CSRs directly:
-  csr_t_p nonvirtual_stvec;
-  csr_t_p nonvirtual_scause;
-  csr_t_p nonvirtual_sepc;
-  csr_t_p nonvirtual_stval;
-  sstatus_proxy_csr_t_p nonvirtual_sstatus;
+    csr_t_p nonvirtual_stvec;
+    csr_t_p nonvirtual_scause;
+    csr_t_p nonvirtual_sepc;
+    csr_t_p nonvirtual_stval;
+    sstatus_proxy_csr_t_p nonvirtual_sstatus;
 
-  csr_t_p mtval2;
-  csr_t_p mtinst;
-  csr_t_p hstatus;
-  csr_t_p hideleg;
-  csr_t_p hedeleg;
-  csr_t_p hcounteren;
-  csr_t_p htval;
-  csr_t_p htinst;
-  csr_t_p hgatp;
-  hvip_csr_t_p hvip;
-  sstatus_csr_t_p sstatus;
-  vsstatus_csr_t_p vsstatus;
-  csr_t_p vstvec;
-  csr_t_p vsepc;
-  csr_t_p vscause;
-  csr_t_p vstval;
-  csr_t_p vsatp;
+    csr_t_p mtval2;
+    csr_t_p mtinst;
+    csr_t_p hstatus;
+    csr_t_p hideleg;
+    csr_t_p hedeleg;
+    csr_t_p hcounteren;
+    csr_t_p htval;
+    csr_t_p htinst;
+    csr_t_p hgatp;
+    hvip_csr_t_p hvip;
+    sstatus_csr_t_p sstatus;
+    vsstatus_csr_t_p vsstatus;
+    csr_t_p vstvec;
+    csr_t_p vsepc;
+    csr_t_p vscause;
+    csr_t_p vstval;
+    csr_t_p vsatp;
 
-  csr_t_p dpc;
-  dcsr_csr_t_p dcsr;
-  csr_t_p tselect;
-  csr_t_p tdata2;
-  csr_t_p tcontrol;
-  csr_t_p scontext;
-  csr_t_p mcontext;
+    csr_t_p dpc;
+    dcsr_csr_t_p dcsr;
+    csr_t_p tselect;
+    csr_t_p tdata2;
+    csr_t_p tcontrol;
+    csr_t_p scontext;
+    csr_t_p mcontext;
 
-  csr_t_p jvt;
+    csr_t_p jvt;
 
-  bool debug_mode;
+    bool debug_mode;
 
-  mseccfg_csr_t_p mseccfg;
+    mseccfg_csr_t_p mseccfg;
 
-  static const int max_pmp = 64;
-  pmpaddr_csr_t_p pmpaddr[max_pmp];
+    static const int max_pmp = 64;
+    pmpaddr_csr_t_p pmpaddr[max_pmp];
 
-  float_csr_t_p fflags;
-  float_csr_t_p frm;
+    float_csr_t_p fflags;
+    float_csr_t_p frm;
 
-  csr_t_p menvcfg;
-  csr_t_p senvcfg;
-  csr_t_p henvcfg;
+    csr_t_p menvcfg;
+    csr_t_p senvcfg;
+    csr_t_p henvcfg;
 
-  csr_t_p mstateen[4];
-  csr_t_p sstateen[4];
-  csr_t_p hstateen[4];
+    csr_t_p mstateen[4];
+    csr_t_p sstateen[4];
+    csr_t_p hstateen[4];
 
-  csr_t_p htimedelta;
-  time_counter_csr_t_p time;
-  csr_t_p time_proxy;
+    csr_t_p htimedelta;
+    time_counter_csr_t_p time;
+    csr_t_p time_proxy;
 
-  csr_t_p stimecmp;
-  csr_t_p vstimecmp;
+    csr_t_p stimecmp;
+    csr_t_p vstimecmp;
 
-  csr_t_p srmcfg;
+    csr_t_p srmcfg;
 
-  csr_t_p ssp;
+    csr_t_p ssp;
 
-  bool serialized; // whether timer CSRs are in a well-defined state
+    bool serialized;
 
-  // When true, execute a single instruction and then enter debug mode.  This
-  // can only be set by executing dret.
-  enum {
-      STEP_NONE,
-      STEP_STEPPING,
-      STEP_STEPPED
-  } single_step;
+    enum {
+        STEP_NONE,
+        STEP_STEPPING,
+        STEP_STEPPED
+    } single_step;
 
-  commit_log_reg_t log_reg_write;
-  commit_log_mem_t log_mem_read;
-  commit_log_mem_t log_mem_write;
-  reg_t last_inst_priv;
-  int last_inst_xlen;
-  int last_inst_flen;
+    commit_log_reg_t log_reg_write;
+    commit_log_mem_t log_mem_read;
+    commit_log_mem_t log_mem_write;
+    reg_t last_inst_priv;
+    int last_inst_xlen;
+    int last_inst_flen;
 
-  elp_t elp;
+    elp_t elp;
 };
 
 class opcode_cache_entry_t {
- public:
-  opcode_cache_entry_t()
-  {
-    reset();
-  }
-
-  void reset()
-  {
-    for (size_t i = 0; i < associativity; i++) {
-      tag[i] = 0;
-      contents[i] = &insn_desc_t::illegal_instruction;
-    }
-  }
-
-  void replace(insn_bits_t opcode, const insn_desc_t* desc)
-  {
-    for (size_t i = associativity - 1; i > 0; i--) {
-      tag[i] = tag[i-1];
-      contents[i] = contents[i-1];
+public:
+    opcode_cache_entry_t() {
+        reset();
     }
 
-    tag[0] = opcode;
-    contents[0] = desc;
-  }
+    void reset() {
+        for (size_t i = 0; i < OPCODE_CACHE_SIZE; i++) {
+            entries[i].reset();
+        }
+    }
 
-  std::tuple<bool, const insn_desc_t*> lookup(insn_bits_t opcode)
-  {
-    for (size_t i = 0; i < associativity; i++)
-      if (tag[i] == opcode)
-        return std::tuple(true, contents[i]);
-
-    return std::tuple(false, nullptr);
-  }
-
- private:
-  static const size_t associativity = 4;
-  insn_bits_t tag[associativity];
-  const insn_desc_t* contents[associativity];
+    struct entry_t {
+        entry_t() : valid(false) {}
+        void reset() { valid = false; }
+        insn_func_t func;
+        bool valid;
+    } entries[OPCODE_CACHE_SIZE];
 };
 
-// this class represents one processor in a RISC-V machine.
-class processor_t : public abstract_device_t
-{
+class processor_t {
 public:
-  processor_t(const isa_parser_t *isa, const cfg_t* cfg,
-              simif_t* sim, uint32_t id, bool halt_on_reset,
-              FILE *log_file, std::ostream& sout_); // because of command line option --log and -s we need both
-  ~processor_t();
+    processor_t(const isa_parser_t *isa, simif_t* sim, uint32_t id, bool halt_on_reset);
+    ~processor_t();
 
-  const isa_parser_t &get_isa() { return *isa; }
-  const cfg_t &get_cfg() { return *cfg; }
+    void set_debug(bool value);
+    void set_histogram(bool value);
+    void enable_log_commits();
+    bool get_log_commits_enabled() const { return log_commits_enabled; }
+    void reset();
+    void step(size_t n); // run for n cycles
+    void put_csr(int which, reg_t val);
+    uint32_t get_id() const { return id; }
+    reg_t get_csr(int which, insn_t insn, bool write, bool peek = 0);
+    reg_t get_csr(int which) { return get_csr(which, insn_t(0), false, true); }
+    mmu_t* get_mmu() { return mmu; }
+    state_t* get_state() { return &state; }
+    const state_t* get_state() const { return &state; }
+    extension_t* get_extension() { return extensions.empty() ? nullptr : extensions[0]; }
+    disassembler_t* get_disassembler() { return disassembler; }
+    void take_interrupt();
+    void take_trap(trap_t& t, reg_t epc);
+    bool supports_impl(uint32_t feature);
+    bool extension_enabled(unsigned char ext) { return isa->extension_enabled(ext); }
+    bool is_supported_isa(uint32_t feature);
+    bool is_supported_xlen(uint32_t xlen);
 
-  void set_debug(bool value);
-  void set_histogram(bool value);
-  void enable_log_commits();
-  bool get_log_commits_enabled() const { return log_commits_enabled; }
-  void reset();
-  void step(size_t n); // run for n cycles
-  void put_csr(int which, reg_t val);
-  uint32_t get_id() const { return id; }
-  reg_t get_csr(int which, insn_t insn, bool write, bool peek = 0);
-  reg_t get_csr(int which) { return get_csr(which, insn_t(0), false, true); }
-  mmu_t* get_mmu() { return mmu; }
-  state_t* get_state() { return &state; }
-  unsigned get_xlen() const { return xlen; }
-  unsigned get_const_xlen() const {
-    // Any code that assumes a const xlen should use this method to
-    // document that assumption. If Spike ever changes to allow
-    // variable xlen, this method should be removed.
-    return xlen;
-  }
-  unsigned get_flen() const {
-    return extension_enabled('Q') ? 128 :
-           extension_enabled('D') ? 64 :
-           extension_enabled('F') ? 32 : 0;
-  }
-  extension_t* get_extension();
-  extension_t* get_extension(const char* name);
-  bool any_custom_extensions() const {
-    return !custom_extensions.empty();
-  }
-  bool any_vector_extensions() const {
-    return VU.VLEN > 0;
-  }
-  bool extension_enabled(unsigned char ext) const {
-    return extension_enabled(isa_extension_t(ext));
-  }
-  bool extension_enabled(isa_extension_t ext) const {
-    if (ext >= 'A' && ext <= 'Z')
-      return state.misa->extension_enabled(ext);
-    else
-      return extension_enable_table[ext];
-  }
-  // Is this extension enabled? and abort if this extension can
-  // possibly be disabled dynamically. Useful for documenting
-  // assumptions about writable misa bits.
-  bool extension_enabled_const(unsigned char ext) const {
-    return extension_enabled_const(isa_extension_t(ext));
-  }
-  bool extension_enabled_const(isa_extension_t ext) const {
-    if (ext >= 'A' && ext <= 'Z') {
-      return state.misa->extension_enabled_const(ext);
-    } else {
-      assert(!extension_dynamic[ext]);
-      extension_assumed_const[ext] = true;
-      return extension_enabled(ext);
-    }
-  }
-  void set_extension_enable(unsigned char ext, bool enable) {
-    assert(!extension_assumed_const[ext]);
-    extension_dynamic[ext] = true;
-    extension_enable_table[ext] = enable && isa->extension_enabled(ext);
-  }
-  void set_impl(uint8_t impl, bool val) { impl_table[impl] = val; }
-  bool supports_impl(uint8_t impl) const {
-    return impl_table[impl];
-  }
-  reg_t pc_alignment_mask() {
-    const int ialign = extension_enabled(EXT_ZCA) ? 16 : 32;
-    return ~(reg_t)(ialign == 16 ? 0 : 2);
-  }
-  void check_pc_alignment(reg_t pc) {
-    if (unlikely(pc & ~pc_alignment_mask()))
-      throw trap_instruction_address_misaligned(state.v, pc, 0, 0);
-  }
-  reg_t legalize_privilege(reg_t);
-  void set_privilege(reg_t, bool);
-  const char* get_privilege_string();
-  void update_histogram(reg_t pc);
-  const disassembler_t* get_disassembler() { return disassembler; }
+    void register_insn(insn_desc_t desc);
+    void register_extension(extension_t* x);
+    void register_inst_fetch_callback(std::function<void(processor_t*, reg_t)> callback);
+    void register_inst_trap_callback(std::function<void(processor_t*, reg_t, trap_t&)> callback);
 
-  FILE *get_log_file() { return log_file; }
+    void set_privilege(reg_t val) { state.prv = val; }
+    reg_t get_privilege() const { return state.prv; }
+    bool get_tenable() const { return tenable; }
 
-  void register_base_insn(insn_desc_t insn) {
-    register_insn(insn, false /* is_custom */);
-  }
-  void register_custom_insn(insn_desc_t insn) {
-    register_insn(insn, true /* is_custom */);
-  }
-  void register_extension(extension_t*);
-
-  // MMIO slave interface
-  bool load(reg_t addr, size_t len, uint8_t* bytes);
-  bool store(reg_t addr, size_t len, const uint8_t* bytes);
-
-  // When true, display disassembly of each instruction that's executed.
-  bool debug;
-  // When true, take the slow simulation path.
-  bool slow_path();
-  bool halted() { return state.debug_mode; }
-  enum {
-    HR_NONE,    /* Halt request is inactive. */
-    HR_REGULAR, /* Regular halt request/debug interrupt. */
-    HR_GROUP    /* Halt requested due to halt group. */
-  } halt_request;
-
-  void trigger_updated(const std::vector<triggers::trigger_t *> &triggers);
-
-  void set_pmp_num(reg_t pmp_num);
-  void set_pmp_granularity(reg_t pmp_granularity);
-  void set_mmu_capability(int cap);
-
-  const char* get_symbol(uint64_t addr);
-
-  void clear_waiting_for_interrupt() { in_wfi = false; };
-  bool is_waiting_for_interrupt() { return in_wfi; };
-
-  void check_if_lpad_required();
+    void trace(uint32_t t, reg_t pc, insn_t insn);
+    void trace_data(uint32_t t, reg_t addr, size_t len, uint8_t* bytes);
+    void trace_opcode(uint32_t opcode, insn_t insn, reg_t pc, reg_t next_pc);
+    void trace_trap(uint32_t t, trap_t& trap);
+    void trace_mmu(uint32_t t, reg_t addr, size_t len, bool store, uint8_t* bytes);
 
 private:
-  const isa_parser_t * const isa;
-  const cfg_t * const cfg;
+    const isa_parser_t* isa;
+    mmu_t* mmu;
+    state_t state;
+    simif_t* sim;
+    uint32_t id;
+    bool halt_on_reset;
+    bool log_commits_enabled;
+    bool tenable;
+    std::vector<insn_desc_t> instructions;
+    std::vector<extension_t*> extensions;
+    std::function<void(processor_t*, reg_t)> inst_fetch_callback;
+    std::function<void(processor_t*, reg_t, trap_t&)> inst_trap_callback;
+    disassembler_t* disassembler;
+    opcode_cache_entry_t opcode_cache[OPCODE_CACHE_SIZE];
 
-  simif_t* sim;
-  mmu_t* mmu; // main memory is always accessed via the mmu
-  std::unordered_map<std::string, extension_t*> custom_extensions;
-  disassembler_t* disassembler;
-  state_t state;
-  uint32_t id;
-  unsigned xlen;
-  bool histogram_enabled;
-  bool log_commits_enabled;
-  FILE *log_file;
-  std::ostream sout_; // needed for socket command interface -s, also used for -d and -l, but not for --log
-  bool halt_on_reset;
-  bool in_wfi;
-  bool check_triggers_icount;
-  std::vector<bool> impl_table;
+    void build_opcode_map();
+    void parse_isa_string(const char* isa);
 
-  // Note: does not include single-letter extensions in misa
-  std::bitset<NUM_ISA_EXTENSIONS> extension_enable_table;
-  std::bitset<NUM_ISA_EXTENSIONS> extension_dynamic;
-  mutable std::bitset<NUM_ISA_EXTENSIONS> extension_assumed_const;
+    reg_t illegal_instruction(insn_t insn, reg_t pc);
+    reg_t custom_mymul(insn_t insn, reg_t pc);
 
-  std::vector<insn_desc_t> instructions;
-  std::vector<insn_desc_t> custom_instructions;
-  std::unordered_map<reg_t,uint64_t> pc_histogram;
-
-  static const size_t OPCODE_CACHE_SIZE = 4095;
-  opcode_cache_entry_t opcode_cache[OPCODE_CACHE_SIZE];
-
-  void take_pending_interrupt() { take_interrupt(state.mip->read() & state.mie->read()); }
-  void take_interrupt(reg_t mask); // take first enabled interrupt in mask
-  void take_trap(trap_t& t, reg_t epc); // take an exception
-  void take_trigger_action(triggers::action_t action, reg_t breakpoint_tval, reg_t epc, bool virt);
-  void disasm(insn_t insn); // disassemble and print an instruction
-  void register_insn(insn_desc_t, bool);
-  int paddr_bits();
-
-  void enter_debug_mode(uint8_t cause);
-
-  void debug_output_log(std::stringstream *s); // either output to interactive user or write to log file
-
-  friend class mmu_t;
-  friend class clint_t;
-  friend class plic_t;
-  friend class extension_t;
-
-  void parse_priv_string(const char*);
-  void build_opcode_map();
-  void register_base_instructions();
-  insn_func_t decode_insn(insn_t insn);
-
-  // Track repeated executions for processor_t::disasm()
-  uint64_t last_pc, last_bits, executions;
-public:
-  entropy_source es; // Crypto ISE Entropy source.
-
-  reg_t n_pmp;
-  reg_t lg_pmp_granularity;
-  reg_t pmp_tor_mask() { return -(reg_t(1) << (lg_pmp_granularity - PMP_SHIFT)); }
-
-  vectorUnit_t VU;
-  triggers::module_t TM;
+    friend class mmu_t;
 };
 
-#endif
+// Implementation of custom_mymul
+reg_t custom_mymul(processor_t* p, insn_t insn, reg_t pc) {
+    require_extension('C');
+    WRITE_RD(sext_xlen(RVC_RS1(p->get_state(), insn) * RVC_RS2(p->get_state(), insn)));
+    p->trace_opcode(MATCH_C_MYMUL, insn, pc, pc + insn_length(MATCH_C_MYMUL));
+    return pc + insn_length(MATCH_C_MYMUL);
+}
+
+// Implementation of trace_opcode
+void processor_t::trace_opcode(uint32_t opcode, insn_t insn, reg_t pc, reg_t next_pc) {
+    // Fetch current PC value
+    pc = state.pc;
+
+    // Fetch register values
+    reg_t rd = 0, rs1 = 0, rs2 = 0;
+    if (insn.rd() != 0) rd = state.XPR[insn.rd()];
+    if (insn.rs1() != 0) rs1 = state.XPR[insn.rs1()];
+    if (insn.rs2() != 0) rs2 = state.XPR[insn.rs2()];
+
+    // Print or log relevant information
+    // Here we use printf as an example, you can change to write to a file or other logging methods
+    printf("PC: 0x%016lx, opcode: 0x%08x, insn: 0x%08x\n", pc, opcode, insn.bits());
+    printf("rd: x%2d=0x%016llx, rs1: x%2d=0x%016llx, rs2: x%2d=0x%016llx\n",
+           insn.rd(), (unsigned long long)rd, insn.rs1(), (unsigned long long)rs1, insn.rs2(), (unsigned long long)rs2);
+
+    // Add more debug information as needed
+}
+
+#endif // _RISCV_PROCESSOR_H

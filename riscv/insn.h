@@ -1,80 +1,12 @@
-#ifndef _RISCV_DECODE_H
-#define _RISCV_DECODE_H
+#ifndef _RISCV_INSN_H
+#define _RISCV_INSN_H
 
-#if (-1 != ~0) || ((-1 >> 1) != -1)
-# error spike requires a two's-complement c++ implementation
-#endif
-
-#include "../softfloat/softfloat_types.h"
-#include "insn.h"
-#include <stdint.h>
-#include <algorithm>
-#include <cstdint>
-#include <string.h>
-#include <strings.h>
-#include <cinttypes>
-#include <type_traits>
-
-typedef int64_t sreg_t;
-typedef uint64_t reg_t; 
-typedef float128_t freg_t;
-
-const int NXPR = 32;
-const int NFPR = 32;
-const int NVPR = 32;
-const int NCSR = 4096;
-
-#define X_RA 1
-#define X_SP 2
-#define X_T0 5
-#define X_S0 8
-#define X_A0 10
-#define X_A1 11
-#define X_Sn 16
-
-#define VCSR_VXRM_SHIFT 1
-#define VCSR_VXRM  (0x3 << VCSR_VXRM_SHIFT)
-
-#define VCSR_VXSAT_SHIFT 0
-#define VCSR_VXSAT  (0x1 << VCSR_VXSAT_SHIFT)
-
-#define FP_RD_NE  0
-#define FP_RD_0   1
-#define FP_RD_DN  2
-#define FP_RD_UP  3
-#define FP_RD_NMM 4
-
-#define FSR_RD_SHIFT 5
-#define FSR_RD   (0x7 << FSR_RD_SHIFT)
-
-#define FPEXC_NX 0x01
-#define FPEXC_UF 0x02
-#define FPEXC_OF 0x04
-#define FPEXC_DZ 0x08
-#define FPEXC_NV 0x10
-
-#define FSR_AEXC_SHIFT 0
-#define FSR_NVA  (FPEXC_NV << FSR_AEXC_SHIFT)
-#define FSR_OFA  (FPEXC_OF << FSR_AEXC_SHIFT)
-#define FSR_UFA  (FPEXC_UF << FSR_AEXC_SHIFT)
-#define FSR_DZA  (FPEXC_DZ << FSR_AEXC_SHIFT)
-#define FSR_NXA  (FPEXC_NX << FSR_AEXC_SHIFT)
-#define FSR_AEXC (FSR_NVA | FSR_OFA | FSR_UFA | FSR_DZA | FSR_NXA)
-
-#define insn_length(x) \
-  (((x) & 0x03) < 0x03 ? 2 : \
-   ((x) & 0x1f) < 0x1f ? 4 : \
-   ((x) & 0x3f) < 0x3f ? 6 : \
-   8)
-#define MAX_INSN_LENGTH 8
-#define PC_ALIGN 2
-
-#define Sn(n) ((n) < 2 ? X_S0 + (n) : X_Sn + (n))
+#include "decode_macros.h"
+#include "processor.h" // 
 
 typedef uint64_t insn_bits_t;
 
-class insn_t
-{
+class insn_t {
 public:
   insn_t() = default;
   insn_t(insn_bits_t bits) : b(bits) {}
@@ -153,16 +85,9 @@ public:
   uint64_t zcmp_regmask() {
     unsigned mask = 0;
     uint64_t rlist = rvc_rlist();
-
-    if (rlist >= 4)
-      mask |= 1U << X_RA;
-
-    for (reg_t i = 5; i <= rlist; i++)
-        mask |= 1U << Sn(i - 5);
-
-    if (rlist == 15)
-      mask |= 1U << Sn(11);
-
+    if (rlist >= 4) mask |= 1U << X_RA;
+    for (reg_t i = 5; i <= rlist; i++) mask |= 1U << Sn(i - 5);
+    if (rlist == 15) mask |= 1U << Sn(11);
     return mask;
   }
 
@@ -193,7 +118,6 @@ public:
       stack_adj_base += 16;
       break;
     }
-
     return stack_adj_base + rvc_spimm();
   }
 
@@ -204,41 +128,7 @@ private:
   uint64_t imm_sign() { return xs(31, 1); }
 };
 
-class processor_t;
+class processor_t; 
 typedef reg_t (*insn_func_t)(processor_t*, insn_t, reg_t);
 
-template <class T, size_t N, bool zero_reg>
-class regfile_t
-{
-public:
-  void write(size_t i, T value)
-  {
-    if (!zero_reg || i != 0)
-      data[i] = value;
-  }
-  const T& operator [] (size_t i) const
-  {
-    return data[i];
-  }
-  regfile_t()
-  {
-    reset();
-  }
-  void reset()
-  {
-    memset(data, 0, sizeof(data));
-  }
-private:
-  T data[N];
-};
-
-#define get_field(reg, mask) \
-  (((reg) & (std::remove_cv<decltype(reg)>::type)(mask)) / ((mask) & ~((mask) << 1)))
-
-#define set_field(reg, mask, val) \
-  (((reg) & ~(std::remove_cv<decltype(reg)>::type)(mask)) | (((std::remove_cv<decltype(reg)>::type)(val) * ((mask) & ~((mask) << 1))) & (std::remove_cv<decltype(reg)>::type)(mask)))
-
-#define DEBUG_START             0x0
-#define DEBUG_END               (0x1000 - 1)
-
-#endif // _RISCV_DECODE_H
+#endif

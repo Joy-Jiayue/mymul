@@ -1,12 +1,14 @@
-// See LICENSE for license details.
-
 #ifndef _RISCV_TRAP_H
 #define _RISCV_TRAP_H
 
 #include "decode.h"
 #include "encoding.h"
 #include <string>
+#include <iostream>
 
+#ifdef _RISCV_TRAP_H_DEBUG
+#pragma message("Including trap.h")
+#endif
 struct state_t;
 
 class trap_debug_mode

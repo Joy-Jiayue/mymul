@@ -32,13 +32,13 @@
 default : all
 .PHONY : default
 
-project_name := @PACKAGE_TARNAME@
-src_dir      := @srcdir@
+project_name := spike
+src_dir      := .
 scripts_dir  := $(src_dir)/scripts
 
-HAVE_INT128 := @HAVE_INT128@
-HAVE_DLOPEN := @HAVE_DLOPEN@
-HAVE_CLANG_PCH := @HAVE_CLANG_PCH@
+HAVE_INT128 := yes
+HAVE_DLOPEN := yes
+HAVE_CLANG_PCH := yes
 
 # If the version information is not in the configure script, then we
 # assume that we are in a working directory. We use the vcs-version.sh
@@ -46,15 +46,15 @@ HAVE_CLANG_PCH := @HAVE_CLANG_PCH@
 # string. Currently the way things are setup we have to run this script
 # everytime we run make so the script needs to be as fast as possible.
 
-ifeq (@PACKAGE_VERSION@,?)
+ifeq (?,?)
   project_ver:=$(shell $(scripts_dir)/vcs-version.sh $(src_dir))
 else
-  project_ver:=@PACKAGE_VERSION@
+  project_ver:=?
 endif
 
 # Installation directories
 
-prefix       ?= @prefix@
+prefix       ?= /usr/local
 
 INSTALLDIR ?= $(DESTDIR)$(prefix)
 
@@ -71,8 +71,8 @@ $(src_dir)/c_mymul.cc:
 # List of subprojects
 #-------------------------------------------------------------------------
 
-sprojs         := @subprojects@
-sprojs_enabled := @subprojects_enabled@
+sprojs         :=  fesvr riscv disasm customext fdt softfloat spike_main spike_dasm
+sprojs_enabled :=  fesvr riscv disasm customext fdt softfloat spike_main spike_dasm
 
 sprojs_include := -iquote . -I$(src_dir) $(addprefix -iquote $(src_dir)/, $(sprojs_enabled))
 VPATH := $(addprefix $(src_dir)/, $(sprojs_enabled))
@@ -101,12 +101,12 @@ VPATH := $(addprefix $(src_dir)/, $(sprojs_enabled))
 default-CFLAGS   := -DPREFIX=\"$(prefix)\" -Wall -Wno-unused -Wno-nonportable-include-path -g -O2 -fPIC
 default-CXXFLAGS := $(default-CFLAGS) -std=c++2a
 
-mcppbs-CPPFLAGS := @CPPFLAGS@
-mcppbs-CFLAGS   := $(default-CFLAGS) @CFLAGS@
-mcppbs-CXXFLAGS := $(default-CXXFLAGS) @CXXFLAGS@
+mcppbs-CPPFLAGS := 
+mcppbs-CFLAGS   := $(default-CFLAGS) -g -O2
+mcppbs-CXXFLAGS := $(default-CXXFLAGS) -g -O2
 
-CC            := @CC@
-CXX           := @CXX@
+CC            := gcc
+CXX           := g++
 
 # These are the flags actually used for a C++ compile or a C compile.
 # The language-specific flags come after the preprocessor flags, but
@@ -116,7 +116,7 @@ all-cxx-flags := \
 all-c-flags := \
   $(mcppbs-CPPFLAGS) $(mcppbs-CFLAGS) $(CPPFLAGS) $(CFLAGS)
 
-COMPILE       := $(CXX) -MMD -MP $(all-cxx-flags) $(sprojs_include) @BOOST_CPPFLAGS@
+COMPILE       := $(CXX) -MMD -MP $(all-cxx-flags) $(sprojs_include) -I/include/boost-0
 COMPILE_C     := $(CC) -MMD -MP $(all-c-flags) $(sprojs_include)
 
 # Linker
@@ -133,8 +133,8 @@ LINK          := $(LD) -L. $(all-link-flags) -Wl,-rpath,$(install_libs_dir) $(pa
 
 # Library creation
 
-AR            := @AR@
-RANLIB        := @RANLIB@
+AR            := ar
+RANLIB        := ranlib
 
 # Host simulator
 
@@ -144,7 +144,7 @@ RUNFLAGS      := @RUNFLAGS@
 # Installation
 
 MKINSTALLDIRS := $(scripts_dir)/mk-install-dirs.sh
-INSTALL       := @INSTALL@
+INSTALL       := /usr/bin/install -c
 INSTALL_HDR   := $(INSTALL) -m 644
 INSTALL_LIB   := $(INSTALL) -m 644
 INSTALL_EXE   := $(INSTALL) -m 755

@@ -1,0 +1,76 @@
+riscv.mk:1138: warning: overriding commands for target `c_mymul.cc'
+Makefile:67: warning: ignoring old commands for target `c_mymul.cc'
+g++ -MMD -MP  -DPREFIX=\"/usr/local\" -Wall -Wno-unused -Wno-nonportable-include-path -g -O2 -fPIC -std=c++2a -g -O2   -iquote . -I. -iquote ./fesvr -iquote ./riscv -iquote ./disasm -iquote ./customext -iquote ./fdt -iquote ./softfloat -iquote ./spike_main -iquote ./spike_dasm -I/include/boost-0    -c ./fesvr/elfloader.cc
+In file included from ./fesvr/elfloader.cc:5:
+In file included from ./fesvr/memif.h:10:
+In file included from ./fesvr/../riscv/cfg.h:7:
+In file included from ./riscv/decode.h:9:
+In file included from ./riscv/insn.h:4:
+In file included from ./riscv/decode_macros.h:10:
+In file included from ./riscv/processor.h:5:
+In file included from ./riscv/insns/c_mymul.h:8:
+In file included from ./riscv/insn_template.h:5:
+In file included from ./riscv/mmu.h:7:
+./riscv/trap.h:22:10: error: unknown type name 'reg_t'
+  trap_t(reg_t which) : which(which) {}
+         ^
+./riscv/trap.h:25:11: error: unknown type name 'reg_t'
+  virtual reg_t get_tval() { return 0; }
+          ^
+./riscv/trap.h:27:11: error: unknown type name 'reg_t'
+  virtual reg_t get_tval2() { return 0; }
+          ^
+./riscv/trap.h:29:11: error: unknown type name 'reg_t'
+  virtual reg_t get_tinst() { return 0; }
+          ^
+./riscv/trap.h:30:3: error: unknown type name 'reg_t'
+  reg_t cause() const { return which; }
+  ^
+./riscv/trap.h:42:3: error: unknown type name 'reg_t'
+  reg_t which;
+  ^
+./riscv/trap.h:48:15: error: unknown type name 'reg_t'
+  insn_trap_t(reg_t which, bool gva, reg_t tval)
+              ^
+./riscv/trap.h:48:38: error: unknown type name 'reg_t'
+  insn_trap_t(reg_t which, bool gva, reg_t tval)
+                                     ^
+./riscv/trap.h:52:3: error: unknown type name 'reg_t'
+  reg_t get_tval() override { return tval; }
+  ^
+./riscv/trap.h:55:3: error: unknown type name 'reg_t'
+  reg_t tval;
+  ^
+./riscv/trap.h:61:14: error: unknown type name 'reg_t'
+  mem_trap_t(reg_t which, bool gva, reg_t tval, reg_t tval2, reg_t tinst)
+             ^
+./riscv/trap.h:61:37: error: unknown type name 'reg_t'
+  mem_trap_t(reg_t which, bool gva, reg_t tval, reg_t tval2, reg_t tinst)
+                                    ^
+./riscv/trap.h:61:49: error: unknown type name 'reg_t'
+  mem_trap_t(reg_t which, bool gva, reg_t tval, reg_t tval2, reg_t tinst)
+                                                ^
+./riscv/trap.h:61:62: error: unknown type name 'reg_t'
+  mem_trap_t(reg_t which, bool gva, reg_t tval, reg_t tval2, reg_t tinst)
+                                                             ^
+./riscv/trap.h:65:3: error: unknown type name 'reg_t'
+  reg_t get_tval() override { return tval; }
+  ^
+./riscv/trap.h:67:3: error: unknown type name 'reg_t'
+  reg_t get_tval2() override { return tval2; }
+  ^
+./riscv/trap.h:69:3: error: unknown type name 'reg_t'
+  reg_t get_tinst() override { return tinst; }
+  ^
+./riscv/trap.h:72:3: error: unknown type name 'reg_t'
+  reg_t tval, tval2, tinst;
+  ^
+./riscv/trap.h:105:1: error: unknown type name 'reg_t'
+DECLARE_MEM_TRAP(CAUSE_MISALIGNED_FETCH, instruction_address_misaligned)
+^
+./riscv/trap.h:95:22: note: expanded from macro 'DECLARE_MEM_TRAP'
+  trap_##x(bool gva, reg_t tval, reg_t tval2, reg_t tinst) : mem_trap_t(n, gva, tval, tval2, tinst) {} \
+                     ^
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+20 errors generated.
+make: *** [elfloader.o] Error 1
